@@ -170,8 +170,8 @@ bool AssimpModel::LoadAssimp(const string& filename)
         srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_DIFFUSE, 0), texDiffusePath);
         srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_SPECULAR, 0), texSpecularPath);
         srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_EMISSIVE, 0), texEmissivePath);
-        //srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_NORMALS, 0), texNormalPath);
-        srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_AMBIENT, 0), texNormalPath);
+        srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_NORMALS, 0), texNormalPath);
+        //srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_AMBIENT, 0), texNormalPath);
         srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_LIGHTMAP, 0), texLightmapPath);
         srcMat->Get(AI_MATKEY_TEXTURE(aiTextureType_REFLECTION, 0), texReflectionPath);
 
@@ -183,6 +183,15 @@ bool AssimpModel::LoadAssimp(const string& filename)
         dstMat->opacity = opacity;
         dstMat->shininess = shininess;
         dstMat->specularStrength = specularStrength;
+
+        //rintf("material %u: %s\n", materialIdx, matName.C_Str());
+        printf("  diffuse : %s\n", texDiffusePath.C_Str());
+        printf("  specular: %s\n", texSpecularPath.C_Str());
+        printf("  normal  : %s\n", texNormalPath.C_Str());
+        printf("  emissive: %s\n", texEmissivePath.C_Str());
+        printf("  lightmap: %s\n", texLightmapPath.C_Str());
+        printf("  reflect : %s\n", texReflectionPath.C_Str());
+
 
         //char *pRem = nullptr;
 

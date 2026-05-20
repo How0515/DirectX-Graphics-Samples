@@ -128,7 +128,7 @@ void Sponza::Startup( Camera& Camera )
     m_CutoutModelPSO.SetRasterizerState(RasterizerTwoSided);
     m_CutoutModelPSO.Finalize();
 
-    ASSERT(m_Model.Load(L"Sponza/sponza.h3d"), "Failed to load model");
+    ASSERT(m_Model.Load(L"FlightHelmet/FlightHelmet.h3d"), "Failed to load model");
     ASSERT(m_Model.GetMeshCount() > 0, "Model contains no meshes");
 
     // The caller of this function can override which materials are considered cutouts
