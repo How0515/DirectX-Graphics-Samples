@@ -348,6 +348,11 @@ std::unique_ptr<DescriptorHeapStack> g_pRaytracingDescriptorHeap;
 
 StructuredBuffer    g_hitShaderMeshInfoBuffer;
 
+// Procedural scene geometry BLAS resources (floor, walls, box).
+// Geometry and material IDs are owned by SponzaRenderer; we only keep the built BLASes.
+std::vector<ComPtr<ID3D12Resource>> g_proceduralBLAS;
+std::vector<UINT>                   g_proceduralMaterialIDs;
+
 static
 void InitializeSceneInfo(
     const ModelH3D& model)
@@ -477,7 +482,8 @@ void SetPipelineStateStackSize(LPCWSTR raygen, LPCWSTR closestHit, LPCWSTR miss,
     stateObjectProperties->SetPipelineStackSize(totalStackSize);
 }
 
-void InitializeRaytracingStateObjects(const ModelH3D &model, UINT numMeshes)
+void InitializeRaytracingStateObjects(const ModelH3D &model, UINT numMeshes,
+    const std::vector<UINT>& proceduralMaterialIDs)
 {
     ZeroMemory(&g_dynamicCb, sizeof(g_dynamicCb));
 
@@ -603,12 +609,15 @@ void InitializeRaytracingStateObjects(const ModelH3D &model, UINT numMeshes)
     const UINT offsetToMaterialConstants = ALIGN(sizeof(UINT32), offsetToDescriptorHandle + sizeof(D3D12_GPU_DESCRIPTOR_HANDLE));
     const UINT shaderRecordSizeInBytes = ALIGN(D3D12_RAYTRACING_SHADER_RECORD_BYTE_ALIGNMENT, offsetToMaterialConstants + sizeof(MaterialRootConstant));
     
-    std::vector<byte> pHitShaderTable(shaderRecordSizeInBytes * numMeshes);
-    auto GetShaderTable = [=](const ModelH3D &model, ID3D12StateObject *pPSO, byte *pShaderTable)
+    const UINT totalHitEntries = numMeshes + (UINT)proceduralMaterialIDs.size();
+    std::vector<byte> pHitShaderTable(shaderRecordSizeInBytes * totalHitEntries);
+    auto GetShaderTable = [=, &proceduralMaterialIDs](const ModelH3D &model, ID3D12StateObject *pPSO, byte *pShaderTable)
     {
         ID3D12StateObjectProperties* stateObjectProperties = nullptr;
         ThrowIfFailed(pPSO->QueryInterface(IID_PPV_ARGS(&stateObjectProperties)));
         void *pHitGroupIdentifierData = stateObjectProperties->GetShaderIdentifier(hitGroupExportName);
+
+        // Helmet mesh entries
         for (UINT i = 0; i < numMeshes; i++)
         {
             byte *pShaderRecord = i * shaderRecordSizeInBytes + pShaderTable;
@@ -619,6 +628,18 @@ void InitializeRaytracingStateObjects(const ModelH3D &model, UINT numMeshes)
 
             MaterialRootConstant material;
             material.MaterialID = i;
+            memcpy(pShaderRecord + offsetToMaterialConstants, &material, sizeof(material));
+        }
+
+        // Procedural geometry entries – shader ignores the texture handle for MaterialID ≥ 100.
+        for (UINT j = 0; j < (UINT)proceduralMaterialIDs.size(); j++)
+        {
+            byte *pShaderRecord = (numMeshes + j) * shaderRecordSizeInBytes + pShaderTable;
+            memcpy(pShaderRecord, pHitGroupIdentifierData, shaderIdentifierSize);
+            memcpy(pShaderRecord + offsetToDescriptorHandle, &g_GpuSceneMaterialSrvs[0].ptr, sizeof(g_GpuSceneMaterialSrvs[0].ptr));
+
+            MaterialRootConstant material;
+            material.MaterialID = proceduralMaterialIDs[j];
             memcpy(pShaderRecord + offsetToMaterialConstants, &material, sizeof(material));
         }
     };
@@ -728,12 +749,17 @@ void D3D12RaytracingMiniEngineSample::Startup( void )
     //
     // Define the top level acceleration structure
     //
-    const UINT numMeshes = model.m_Header.meshCount;
-    const UINT numInstances = numMeshes;
+    const UINT numMeshes    = model.m_Header.meshCount;
+    const UINT numProcedural = Sponza::GetNumProceduralSurfaces();
+    const UINT numInstances = numMeshes + numProcedural;
 
-    // You can toggle between all meshes in one BLAS or one instance per mesh. Typically, to save memory, you would instance a BLAS multiple
-    // times when geometry is duplicated.
-    ASSERT(numInstances == 1 || numInstances == numMeshes);
+    // Collect procedural surface info and store global material IDs.
+    std::vector<Sponza::ProceduralSurfaceDesc> procDescs(numProcedural);
+    g_proceduralMaterialIDs.resize(numProcedural);
+    for (UINT j = 0; j < numProcedural; ++j) {
+        procDescs[j] = Sponza::GetProceduralSurface(j);
+        g_proceduralMaterialIDs[j] = procDescs[j].materialID;
+    }
 
     D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO topLevelPrebuildInfo;
     D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC topLevelAccelerationStructureDesc = {};
@@ -788,16 +814,17 @@ void D3D12RaytracingMiniEngineSample::Startup( void )
         trianglesDesc.Transform3x4 = 0;
     }
 
-    g_bvh_bottomLevelAccelerationStructures.resize(numInstances);
-    std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> blasDescs(numInstances);
+    // ---- Helmet BLASes (one per mesh) ----------------------------------------
+    g_bvh_bottomLevelAccelerationStructures.resize(numMeshes);
+    std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> blasDescs(numMeshes);
     std::vector<D3D12_RAYTRACING_INSTANCE_DESC> instanceDescs(numInstances);
-    std::vector<ByteAddressBuffer> blasScratchBuffers(numInstances);
+    std::vector<ByteAddressBuffer> blasScratchBuffers(numMeshes);
 
-    for (UINT i = 0; i < numInstances; i++)
+    for (UINT i = 0; i < numMeshes; i++)
     {
         D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& blasDesc = blasDescs[i];
         blasDesc.Inputs.Type = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
-        blasDesc.Inputs.NumDescs = (numInstances == numMeshes) ? 1 : numMeshes;
+        blasDesc.Inputs.NumDescs = 1;  // one mesh per BLAS
         blasDesc.Inputs.pGeometryDescs = &geometryDescs[i];
         blasDesc.Inputs.Flags = buildFlag;
         blasDesc.Inputs.DescsLayout = D3D12_ELEMENTS_LAYOUT_ARRAY;
@@ -810,31 +837,79 @@ void D3D12RaytracingMiniEngineSample::Startup( void )
         auto blasBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(bottomLevelPrebuildInfo.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
         g_Device->CreateCommittedResource(
             &defaultHeapProps,
-            D3D12_HEAP_FLAG_NONE, 
+            D3D12_HEAP_FLAG_NONE,
             &blasBufferDesc,
             D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE,
-            nullptr, 
+            nullptr,
             IID_PPV_ARGS(&blas));
 
         blasDesc.DestAccelerationStructureData = blas->GetGPUVirtualAddress();
-
         blasScratchBuffers[i].Create(L"BLAS build scratch buffer", (UINT)bottomLevelPrebuildInfo.ScratchDataSizeInBytes, 1);
         blasDesc.ScratchAccelerationStructureData = blasScratchBuffers[i].GetGpuVirtualAddress();
 
         D3D12_RAYTRACING_INSTANCE_DESC &instanceDesc = instanceDescs[i];
         g_pRaytracingDescriptorHeap->AllocateBufferUav(*blas.Get());
-        
-        // Identity matrix
         ZeroMemory(instanceDesc.Transform, sizeof(instanceDesc.Transform));
         instanceDesc.Transform[0][0] = 1.0f;
         instanceDesc.Transform[1][1] = 1.0f;
         instanceDesc.Transform[2][2] = 1.0f;
-        
         instanceDesc.AccelerationStructure = blas->GetGPUVirtualAddress();
         instanceDesc.Flags = 0;
         instanceDesc.InstanceID = 0;
         instanceDesc.InstanceMask = 1;
         instanceDesc.InstanceContributionToHitGroupIndex = i;
+    }
+
+    // ---- Procedural BLASes (floor, walls, box) --------------------------------
+    g_proceduralBLAS.resize(numProcedural);
+    std::vector<D3D12_RAYTRACING_GEOMETRY_DESC>             procGeomDescs(numProcedural);
+    std::vector<D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC> procBlasDescs(numProcedural);
+    std::vector<ByteAddressBuffer>                          procBlasScratch(numProcedural);
+
+    for (UINT j = 0; j < numProcedural; ++j)
+    {
+        const auto& pd = procDescs[j];
+
+        D3D12_RAYTRACING_GEOMETRY_DESC& gd = procGeomDescs[j];
+        gd.Type  = D3D12_RAYTRACING_GEOMETRY_TYPE_TRIANGLES;
+        gd.Flags = D3D12_RAYTRACING_GEOMETRY_FLAG_OPAQUE;
+        gd.Triangles.VertexFormat            = DXGI_FORMAT_R32G32B32_FLOAT;
+        gd.Triangles.VertexCount             = pd.vertexCount;
+        gd.Triangles.VertexBuffer.StartAddress  = pd.vertexBufferVA;  // position at byte 0
+        gd.Triangles.VertexBuffer.StrideInBytes  = sizeof(Sponza::SceneVertex);  // 56
+        gd.Triangles.IndexBuffer             = pd.indexBufferVA;
+        gd.Triangles.IndexCount              = pd.indexCount;
+        gd.Triangles.IndexFormat             = DXGI_FORMAT_R16_UINT;
+        gd.Triangles.Transform3x4            = 0;
+
+        D3D12_BUILD_RAYTRACING_ACCELERATION_STRUCTURE_DESC& pd2 = procBlasDescs[j];
+        pd2.Inputs.Type          = D3D12_RAYTRACING_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL;
+        pd2.Inputs.NumDescs      = 1;
+        pd2.Inputs.pGeometryDescs = &procGeomDescs[j];
+        pd2.Inputs.Flags         = buildFlag;
+        pd2.Inputs.DescsLayout   = D3D12_ELEMENTS_LAYOUT_ARRAY;
+
+        D3D12_RAYTRACING_ACCELERATION_STRUCTURE_PREBUILD_INFO procPrebuild;
+        g_pRaytracingDevice->GetRaytracingAccelerationStructurePrebuildInfo(&pd2.Inputs, &procPrebuild);
+
+        auto procBuf = CD3DX12_RESOURCE_DESC::Buffer(procPrebuild.ResultDataMaxSizeInBytes, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+        g_Device->CreateCommittedResource(&defaultHeapProps, D3D12_HEAP_FLAG_NONE, &procBuf,
+            D3D12_RESOURCE_STATE_RAYTRACING_ACCELERATION_STRUCTURE, nullptr,
+            IID_PPV_ARGS(&g_proceduralBLAS[j]));
+
+        pd2.DestAccelerationStructureData = g_proceduralBLAS[j]->GetGPUVirtualAddress();
+        procBlasScratch[j].Create(L"ProcBLAS Scratch", (UINT)procPrebuild.ScratchDataSizeInBytes, 1);
+        pd2.ScratchAccelerationStructureData = procBlasScratch[j].GetGpuVirtualAddress();
+
+        D3D12_RAYTRACING_INSTANCE_DESC& inst = instanceDescs[numMeshes + j];
+        g_pRaytracingDescriptorHeap->AllocateBufferUav(*g_proceduralBLAS[j].Get());
+        ZeroMemory(inst.Transform, sizeof(inst.Transform));
+        inst.Transform[0][0] = inst.Transform[1][1] = inst.Transform[2][2] = 1.0f;
+        inst.AccelerationStructure             = g_proceduralBLAS[j]->GetGPUVirtualAddress();
+        inst.Flags                             = 0;
+        inst.InstanceID                        = 0;
+        inst.InstanceMask                      = 1;
+        inst.InstanceContributionToHitGroupIndex = numMeshes + j;
     }
 
     //
@@ -858,23 +933,20 @@ void D3D12RaytracingMiniEngineSample::Startup( void )
     pRaytracingCommandList->SetDescriptorHeaps(ARRAYSIZE(descriptorHeaps), descriptorHeaps);
 
     auto uavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(nullptr);
-    for (UINT i = 0; i < blasDescs.size(); i++)
-    {
+    for (UINT i = 0; i < (UINT)blasDescs.size(); i++)
         pRaytracingCommandList->BuildRaytracingAccelerationStructure(&blasDescs[i], 0, nullptr);
-
-        // If each BLAS build reuses the scratch buffer, you would need a UAV barrier between each. But without
-        // barriers, the driver may be able to batch these BLAS builds together. This maximizes GPU utilization
-        // and should execute more quickly.
-    }
+    for (UINT j = 0; j < (UINT)procBlasDescs.size(); j++)
+        pRaytracingCommandList->BuildRaytracingAccelerationStructure(&procBlasDescs[j], 0, nullptr);
     pRaytracingCommandList->ResourceBarrier(1, &uavBarrier);
     pRaytracingCommandList->BuildRaytracingAccelerationStructure(&topLevelAccelerationStructureDesc, 0, nullptr);
-    
+
     gfxContext.Finish(true);
 
     //
     // Build the RTPSO
     //
-    InitializeRaytracingStateObjects(model, numMeshes);
+    InitializeRaytracingStateObjects(model, numMeshes,
+        std::vector<UINT>(g_proceduralMaterialIDs.begin(), g_proceduralMaterialIDs.end()));
 
     m_CameraPosArrayCurrentPosition = 0;
     

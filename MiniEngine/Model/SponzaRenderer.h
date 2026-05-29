@@ -46,4 +46,31 @@ namespace Sponza
     extern ExpVar m_AmbientIntensity;
     extern ExpVar m_SunLightIntensity;
 
+    // -------------------------------------------------------------------------
+    // Procedural scene geometry (floor, walls, box occluder).
+    // Used for both rasterization draw calls AND raytracing BLAS construction.
+    // Vertex layout: position(3f) texcoord(2f) normal(3f) tangent(3f) bitangent(3f) = 56 bytes.
+    // -------------------------------------------------------------------------
+    struct SceneVertex
+    {
+        float position[3];   // offset  0
+        float texcoord[2];   // offset 12
+        float normal[3];     // offset 20
+        float tangent[3];    // offset 32
+        float bitangent[3];  // offset 44
+    };
+    static_assert(sizeof(SceneVertex) == 56, "SceneVertex must be 56 bytes");
+
+    // Descriptor used by ModelViewer.cpp to build BLAS entries.
+    struct ProceduralSurfaceDesc
+    {
+        D3D12_GPU_VIRTUAL_ADDRESS vertexBufferVA;  // position at byte offset 0, stride 56
+        D3D12_GPU_VIRTUAL_ADDRESS indexBufferVA;
+        UINT                      vertexCount;
+        UINT                      indexCount;
+        UINT                      materialID;   // ≥100: handled procedurally in hit shader
+    };
+
+    UINT                 GetNumProceduralSurfaces();
+    ProceduralSurfaceDesc GetProceduralSurface(UINT index);
 }
