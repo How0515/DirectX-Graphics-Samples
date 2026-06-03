@@ -849,10 +849,13 @@ void D3D12RaytracingMiniEngineSample::Startup( void )
 
         D3D12_RAYTRACING_INSTANCE_DESC &instanceDesc = instanceDescs[i];
         g_pRaytracingDescriptorHeap->AllocateBufferUav(*blas.Get());
-        ZeroMemory(instanceDesc.Transform, sizeof(instanceDesc.Transform));
-        instanceDesc.Transform[0][0] = 1.0f;
-        instanceDesc.Transform[1][1] = 1.0f;
-        instanceDesc.Transform[2][2] = 1.0f;
+        // DXR instance transform is column-major (M*v). MiniEngine Matrix4 is row-major (v*M).
+        // Transpose before copying so the RT hardware applies the same rotation as rasterization.
+        {
+            XMFLOAT4X4 xf;
+            XMStoreFloat4x4(&xf, XMMatrixTranspose((XMMATRIX)Sponza::m_ModelTransform));
+            memcpy(instanceDesc.Transform, xf.m, sizeof(instanceDesc.Transform));
+        }
         instanceDesc.AccelerationStructure = blas->GetGPUVirtualAddress();
         instanceDesc.Flags = 0;
         instanceDesc.InstanceID = 0;

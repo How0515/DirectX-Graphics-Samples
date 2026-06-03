@@ -54,6 +54,7 @@ namespace Sponza
     GraphicsPSO m_CutoutShadowPSO(L"Sponza: Cutout Shadow PSO");
 
     ModelH3D m_Model;
+    Matrix4 m_ModelTransform(kIdentity);
     std::vector<bool> m_pMaterialIsCutout;
 
     Vector3 m_SunDirection;
@@ -234,11 +235,19 @@ void Sponza::Startup( Camera& Camera )
 
     ParticleEffects::InitFromJSON(L"Sponza/particles.json");
 
-    float modelRadius = Length(m_Model.GetBoundingBox().GetDimensions()) * 0.5f;
-    const Vector3 eye = m_Model.GetBoundingBox().GetCenter() + Vector3(modelRadius * 0.5f, 0.0f, 0.0f);
-    Camera.SetEyeAtUp( eye, Vector3(kZero), Vector3(kYUnitVector) );
+    const AxisAlignedBox& modelBounds = m_Model.GetBoundingBox();
+    const Vector3 modelDimensions = modelBounds.GetDimensions();
+    const float modelThickness = (float)modelDimensions.GetZ();
+    const float modelHalfHeight = (float)modelDimensions.GetY() * 0.5f;
 
-    Lighting::CreateRandomLights(m_Model.GetBoundingBox().GetMin(), m_Model.GetBoundingBox().GetMax());
+    m_ModelTransform = Matrix4(AffineTransform::MakeYRotation(XM_PI));
+
+    const Vector3 modelCenter = modelBounds.GetCenter();
+    const Vector3 cameraTarget = modelCenter + Vector3(0.0f, modelHalfHeight * 0.5f, 0.0f);
+    const Vector3 eye = cameraTarget + Vector3(0.0f, 0.0f, -modelThickness * 6.0f);
+    Camera.SetEyeAtUp( eye, cameraTarget, Vector3(kYUnitVector) );
+
+    Lighting::CreateRandomLights(modelBounds.GetMin(), modelBounds.GetMax());
 
     // ---- Build procedural scene geometry ------------------------------------
     {
@@ -401,8 +410,8 @@ void Sponza::RenderObjects( GraphicsContext& gfxContext, const Matrix4& ViewProj
         Matrix4 modelToShadow;
         XMFLOAT3 viewerPos;
     } vsConstants;
-    vsConstants.modelToProjection = ViewProjMat;
-    vsConstants.modelToShadow = m_SunShadow.GetShadowMatrix();
+    vsConstants.modelToProjection = ViewProjMat * m_ModelTransform;
+    vsConstants.modelToShadow = m_SunShadow.GetShadowMatrix() * m_ModelTransform;
     XMStoreFloat3(&vsConstants.viewerPos, viewerPos);
 
     gfxContext.SetDynamicConstantBufferView(Renderer::kMeshConstants, sizeof(vsConstants), &vsConstants);
@@ -438,9 +447,25 @@ void Sponza::RenderObjects( GraphicsContext& gfxContext, const Matrix4& ViewProj
 // Draws all procedural surfaces using whatever PSO is currently bound.
 // withMaterials=true → also binds per-surface SRV table + kCommonCBV (for colour pass).
 // withMaterials=false → depth/shadow pass (no material descriptors needed).
-static void RenderProceduralSurfaces(GraphicsContext& ctx, bool withMaterials)
+// viewProjMat / viewerPos: resets kMeshConstants to Identity model transform so that
+// procedural surfaces are NOT affected by m_ModelTransform.
+static void RenderProceduralSurfaces(
+    GraphicsContext& ctx, bool withMaterials,
+    const Matrix4& viewProjMat, const Vector3& viewerPos)
 {
     using namespace Sponza;
+
+    // Procedural surfaces have no model transform → reset kMeshConstants to Identity.
+    struct VSConstants {
+        Matrix4  modelToProjection;
+        Matrix4  modelToShadow;
+        XMFLOAT3 viewerPos;
+    } vsConst;
+    vsConst.modelToProjection = viewProjMat;
+    vsConst.modelToShadow     = m_SunShadow.GetShadowMatrix();
+    XMStoreFloat3(&vsConst.viewerPos, viewerPos);
+    ctx.SetDynamicConstantBufferView(Renderer::kMeshConstants, sizeof(vsConst), &vsConst);
+
     for (UINT i = 0; i < kNumProcSurfaces; ++i)
     {
         auto& s = m_procSurfaces[i];
@@ -579,7 +604,7 @@ void Sponza::RenderScene(
         }
         // Procedural surfaces: contribute to depth prepass (for SSAO)
         gfxContext.SetPipelineState(m_DepthPSO);
-        RenderProceduralSurfaces(gfxContext, false);
+        RenderProceduralSurfaces(gfxContext, false, camera.GetViewProjMatrix(), camera.GetPosition());
     }
 
     SSAO::Render(gfxContext, camera);
@@ -617,7 +642,7 @@ void Sponza::RenderScene(
                 RenderObjects(gfxContext, m_SunShadow.GetViewProjMatrix(), camera.GetPosition(), kCutout);
                 // Procedural surfaces: cast shadows
                 gfxContext.SetPipelineState(m_ShadowPSO);
-                RenderProceduralSurfaces(gfxContext, false);
+                RenderProceduralSurfaces(gfxContext, false, m_SunShadow.GetViewProjMatrix(), camera.GetPosition());
                 g_ShadowBuffer.EndRendering(gfxContext);
             }
         }
@@ -657,7 +682,7 @@ void Sponza::RenderScene(
                 RenderObjects( gfxContext, camera.GetViewProjMatrix(), camera.GetPosition(), Sponza::kCutout );
                 // Procedural surfaces: colour pass (floor, walls, box)
                 gfxContext.SetPipelineState(m_ModelPSO);
-                RenderProceduralSurfaces(gfxContext, true);
+                RenderProceduralSurfaces(gfxContext, true, camera.GetViewProjMatrix(), camera.GetPosition());
             }
         }
     }

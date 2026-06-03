@@ -24,6 +24,7 @@ namespace Math
 {
     class Camera;
     class Vector3;
+    class Matrix4;
 }
 
 namespace Sponza
@@ -42,6 +43,7 @@ namespace Sponza
     const ModelH3D& GetModel();
 
     extern Math::Vector3 m_SunDirection;
+    extern Math::Matrix4 m_ModelTransform;
     extern ShadowCamera m_SunShadow;
     extern ExpVar m_AmbientIntensity;
     extern ExpVar m_SunLightIntensity;
