@@ -271,6 +271,7 @@ void Sponza::Startup( Camera& Camera )
         const UINT matIDs[kNumProcSurfaces] = {100, 101, 102, 103, 104};
 
         // FillQuad: writes 4 vertices (pos+normal+tangent+bitangent) and 6 indices.
+        // Indices are CCW to match MiniEngine's RasterizerDefault (FrontCounterClockwise=TRUE).
         auto FillQuad = [](
             SceneVertex* v, uint16_t* idx, uint16_t base,
             const float p0[3], const float p1[3],
@@ -285,12 +286,13 @@ void Sponza::Startup( Camera& Camera )
             }
             memcpy(v[0].position, p0, 12); memcpy(v[1].position, p1, 12);
             memcpy(v[2].position, p2, 12); memcpy(v[3].position, p3, 12);
-            idx[0]=base; idx[1]=base+1; idx[2]=base+2;
-            idx[3]=base; idx[4]=base+2; idx[5]=base+3;
+            // CCW winding: swap middle index of each triangle
+            idx[0]=base; idx[1]=base+2; idx[2]=base+1;
+            idx[3]=base; idx[4]=base+3; idx[5]=base+2;
         };
 
-        SceneVertex tmpV[20] = {};
-        uint16_t    tmpI[30] = {};
+        SceneVertex tmpV[24] = {};
+        uint16_t    tmpI[36] = {};
         UINT vcnt[kNumProcSurfaces], icnt[kNumProcSurfaces];
 
         // 0 – Floor (n=0,1,0)
@@ -329,7 +331,7 @@ void Sponza::Startup( Camera& Camera )
           m_procSurfaces[3].vb.Create(L"ProcWhiteWall VB", 4, sizeof(SceneVertex), tmpV);
           m_procSurfaces[3].ib.Create(L"ProcWhiteWall IB", 6, sizeof(uint16_t),    tmpI); }
 
-        // 4 – Thin box occluder (5 faces, one BLAS)
+        // 4 – Box occluder (6 faces: top, front, back, left, right, bottom)
         { memset(tmpV, 0, sizeof(tmpV)); memset(tmpI, 0, sizeof(tmpI));
           { const float p0[3]={kBoxXMin,kBoxYMax,kBoxZMin}, p1[3]={kBoxXMax,kBoxYMax,kBoxZMin},
                         p2[3]={kBoxXMax,kBoxYMax,kBoxZMax},  p3[3]={kBoxXMin,kBoxYMax,kBoxZMax};
@@ -351,9 +353,13 @@ void Sponza::Startup( Camera& Camera )
                         p2[3]={kBoxXMax,kBoxYMin,kBoxZMax},  p3[3]={kBoxXMax,kBoxYMax,kBoxZMax};
             const float n[3]={1,0,0},  t[3]={0,1,0},  bt[3]={0,0,1};
             FillQuad(tmpV+16, tmpI+24, 16, p0,p1,p2,p3, n,t,bt); }  // right
-          vcnt[4]=20; icnt[4]=30;
-          m_procSurfaces[4].vb.Create(L"ProcBox VB", 20, sizeof(SceneVertex), tmpV);
-          m_procSurfaces[4].ib.Create(L"ProcBox IB", 30, sizeof(uint16_t),    tmpI); }
+          { const float p0[3]={kBoxXMin,kBoxYMin,kBoxZMax}, p1[3]={kBoxXMax,kBoxYMin,kBoxZMax},
+                        p2[3]={kBoxXMax,kBoxYMin,kBoxZMin},  p3[3]={kBoxXMin,kBoxYMin,kBoxZMin};
+            const float n[3]={0,-1,0}, t[3]={1,0,0},  bt[3]={0,0,1};
+            FillQuad(tmpV+20, tmpI+30, 20, p0,p1,p2,p3, n,t,bt); }  // bottom
+          vcnt[4]=24; icnt[4]=36;
+          m_procSurfaces[4].vb.Create(L"ProcBox VB", 24, sizeof(SceneVertex), tmpV);
+          m_procSurfaces[4].ib.Create(L"ProcBox IB", 36, sizeof(uint16_t),    tmpI); }
 
         // Finalise per-surface metadata and allocate SRV descriptors.
         UINT descSize = Renderer::s_TextureHeap.GetDescriptorSize();
