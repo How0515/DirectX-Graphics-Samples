@@ -61,7 +61,7 @@ namespace Sponza
     ShadowCamera m_SunShadow;
 
     ExpVar m_AmbientIntensity("Sponza/Lighting/Ambient Intensity", 0.1f, -16.0f, 16.0f, 0.1f);
-    ExpVar m_SunLightIntensity("Sponza/Lighting/Sun Light Intensity", 4.0f, 0.0f, 16.0f, 0.1f);
+    ExpVar m_SunLightIntensity("Sponza/Lighting/Sun Light Intensity", 1.5f, 0.0f, 16.0f, 0.1f);
     NumVar m_SunOrientation("Sponza/Lighting/Sun Orientation", -0.5f, -100.0f, 100.0f, 0.1f );
     NumVar m_SunInclination("Sponza/Lighting/Sun Inclination", 0.75f, 0.0f, 1.0f, 0.01f );
     NumVar ShadowDimX("Sponza/Lighting/Shadow Dim X", 5000, 1000, 10000, 100 );
@@ -263,10 +263,10 @@ void Sponza::Startup( Camera& Camera )
         // Surface diffuse colours (must match DiffuseHitShaderLib.hlsl's GetProceduralColor).
         struct SurfCol { float r, g, b; } cols[kNumProcSurfaces] = {
             {0.725f, 0.710f, 0.680f},   // floor
-            {0.630f, 0.065f, 0.050f},   // red wall
-            {0.140f, 0.450f, 0.091f},   // green wall
-            {0.850f, 0.850f, 0.850f},   // white back wall
-            {0.650f, 0.650f, 0.650f},   // box
+            {0.630f, 0.065f, 0.050f},   // red wall   → 빨간색 (Cornell box 기준 유지)
+            {0.140f, 0.450f, 0.091f},   // green wall → 초록색 (Cornell box 기준 유지)
+            {0.200f, 0.350f, 0.900f},   // back wall  → 파란색
+            {0.900f, 0.400f, 0.050f},   // box        → 주황색
         };
         const UINT matIDs[kNumProcSurfaces] = {100, 101, 102, 103, 104};
 

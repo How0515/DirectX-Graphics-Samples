@@ -156,10 +156,10 @@ float3 GetProceduralColor(uint matID)
     switch (matID)
     {
         case 100: return float3(0.725f, 0.710f, 0.680f); // floor
-        case 101: return float3(0.630f, 0.065f, 0.050f); // red wall
-        case 102: return float3(0.140f, 0.450f, 0.091f); // green wall
-        case 103: return float3(0.850f, 0.850f, 0.850f); // white back wall
-        case 104: return float3(0.650f, 0.650f, 0.650f); // box
+        case 101: return float3(0.630f, 0.065f, 0.050f); // red wall   빨간색
+        case 102: return float3(0.140f, 0.450f, 0.091f); // green wall 초록색
+        case 103: return float3(0.200f, 0.350f, 0.900f); // back wall  파란색
+        case 104: return float3(0.900f, 0.400f, 0.050f); // box        주황색
         default:  return float3(1.0f, 0.0f, 0.0f);       // unknown: debug red
     }
 }
