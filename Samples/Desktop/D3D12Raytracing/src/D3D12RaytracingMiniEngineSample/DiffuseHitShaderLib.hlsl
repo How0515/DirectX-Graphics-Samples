@@ -150,6 +150,40 @@ float3 BarycentricCoordinates(float3 pt, float3 v0, float3 v1, float3 v2)
     return float3(u, v, w);
 }
 
+// Diffuse colours for procedural surfaces — must match SponzaRenderer.cpp cols[].
+float3 GetProceduralColor(uint matID)
+{
+    switch (matID)
+    {
+        case 100: return float3(0.725f, 0.710f, 0.680f); // floor
+        case 101: return float3(0.630f, 0.065f, 0.050f); // red wall
+        case 102: return float3(0.140f, 0.450f, 0.091f); // green wall
+        case 103: return float3(0.850f, 0.850f, 0.850f); // white back wall
+        case 104: return float3(0.650f, 0.650f, 0.650f); // box
+        default:  return float3(1.0f, 0.0f, 0.0f);       // unknown: debug red
+    }
+}
+
+// World-space outward normals for procedural surfaces.
+// Box (matID 104): each face = 2 triangles, ordered top/front/back/left/right/bottom.
+float3 GetProceduralNormal(uint matID, uint primIdx)
+{
+    if (matID == 100) return float3( 0,  1,  0);  // floor
+    if (matID == 101) return float3( 1,  0,  0);  // red wall
+    if (matID == 102) return float3(-1,  0,  0);  // green wall
+    if (matID == 103) return float3( 0,  0, -1);  // back wall
+    if (matID == 104)
+    {
+        if (primIdx <  2) return float3( 0,  1,  0);  // top
+        if (primIdx <  4) return float3( 0,  0, -1);  // front
+        if (primIdx <  6) return float3( 0,  0,  1);  // back
+        if (primIdx <  8) return float3(-1,  0,  0);  // left
+        if (primIdx < 10) return float3( 1,  0,  0);  // right
+                          return float3( 0, -1,  0);  // bottom
+    }
+    return float3(0, 1, 0);
+}
+
 [shader("closesthit")]
 void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
@@ -161,6 +195,41 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
     uint materialID = MaterialID;
     uint triangleID = PrimitiveIndex();
+
+    // Procedural surfaces (floor/walls/box): g_meshInfo is sized for the helmet only.
+    // Bypass mesh attribute loading and use hardcoded geometry data instead.
+    if (materialID >= 100)
+    {
+        float3 worldPos    = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+        float3 diffuse     = GetProceduralColor(materialID);
+        float3 normal      = GetProceduralNormal(materialID, PrimitiveIndex());
+        float3 viewDir     = normalize(-WorldRayDirection());
+
+        float shadow = 1.0f;
+        if (UseShadowRays)
+        {
+            RayDesc rd = { worldPos, 0.1f, SunDirection, FLT_MAX };
+            RayPayload sp; sp.SkipShading = true; sp.RayHitT = FLT_MAX;
+            TraceRay(g_accel, RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, ~0, 0, 1, 0, rd, sp);
+            if (sp.RayHitT < FLT_MAX) shadow = 0.0f;
+        }
+        else
+        {
+            float4 sc = mul(ModelToShadow, float4(worldPos, 1.0f));
+            shadow = GetShadow(sc.xyz);
+        }
+
+        float3 out3 = AmbientColor * diffuse * texSSAO[DispatchRaysIndex().xy];
+        out3 += shadow * ApplyLightCommon(
+            diffuse, float3(0.56f, 0.56f, 0.56f), 0.0f, 128.0f,
+            normal, viewDir, SunDirection, SunColor);
+
+        if (IsReflection)
+            out3 = g_screenOutput[DispatchRaysIndex().xy].rgb + out3;
+
+        g_screenOutput[DispatchRaysIndex().xy] = float4(out3, 1.0f);
+        return;
+    }
 
     RayTraceMeshInfo info = g_meshInfo[materialID];
 
