@@ -266,6 +266,20 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
 
     float3 worldPosition = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
+    // Transform object-space positions to world space using the BLAS instance transform.
+    // Required when the instance has a non-identity transform (e.g. Y-axis rotation).
+    // Without this, worldPosition (world space) and p0/p1/p2 (object space) are in
+    // different spaces, causing incorrect UV gradients → wrong mip selection.
+    float3x4 objToWorld = ObjectToWorld3x4();
+    float3 wp0 = mul(objToWorld, float4(p0, 1.0));
+    float3 wp1 = mul(objToWorld, float4(p1, 1.0));
+    float3 wp2 = mul(objToWorld, float4(p2, 1.0));
+
+    // Also transform normals/tangents to world space for correct lighting.
+    vsNormal    = normalize(mul(objToWorld, float4(vsNormal,    0.0)));
+    vsTangent   = normalize(mul(objToWorld, float4(vsTangent,   0.0)));
+    vsBitangent = normalize(mul(objToWorld, float4(vsBitangent, 0.0)));
+
     //---------------------------------------------------------------------------------------------
     // Compute partial derivatives of UV coordinates:
     //
@@ -275,8 +289,8 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
     //  4) Reconstruct the UV coordinates at the hit points
     //  5) Take the difference in UV coordinates as the partial derivatives X and Y
 
-    // Normal for plane
-    float3 triangleNormal = normalize(cross(p2 - p0, p1 - p0));
+    // Normal for plane — use world-space positions so the plane is consistent with worldPosition
+    float3 triangleNormal = normalize(cross(wp2 - wp0, wp1 - wp0));
 
     // Helper rays
     uint2 threadID = DispatchRaysIndex().xy;
@@ -288,9 +302,9 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
     float3 xOffsetPoint = RayPlaneIntersection(worldPosition, triangleNormal, ddxOrigin, ddxDir);
     float3 yOffsetPoint = RayPlaneIntersection(worldPosition, triangleNormal, ddyOrigin, ddyDir);
 
-    // Compute barycentrics 
-    float3 baryX = BarycentricCoordinates(xOffsetPoint, p0, p1, p2);
-    float3 baryY = BarycentricCoordinates(yOffsetPoint, p0, p1, p2);
+    // Compute barycentrics — use world-space triangle positions
+    float3 baryX = BarycentricCoordinates(xOffsetPoint, wp0, wp1, wp2);
+    float3 baryY = BarycentricCoordinates(yOffsetPoint, wp0, wp1, wp2);
 
     // Compute UVs and take the difference
     float3x2 uvMat = float3x2(uv0, uv1, uv2);
