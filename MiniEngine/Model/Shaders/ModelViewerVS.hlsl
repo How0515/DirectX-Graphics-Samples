@@ -18,6 +18,7 @@ cbuffer VSConstants : register(b0)
 {
     float4x4 modelToProjection;
     float4x4 modelToShadow;
+    float4x4 modelToWorld;    // world-space transform for normals and position
     float3 ViewerPos;
 };
 
@@ -56,14 +57,16 @@ VSOutput main(VSInput vsInput, uint vertexID : SV_VertexID)
     VSOutput vsOutput;
 
     vsOutput.position = mul(modelToProjection, float4(vsInput.position, 1.0));
-    vsOutput.worldPos = vsInput.position;
+    float3 worldPos = mul(modelToWorld, float4(vsInput.position, 1.0)).xyz;
+    vsOutput.worldPos = worldPos;
     vsOutput.texCoord = vsInput.texcoord0;
-    vsOutput.viewDir = vsInput.position - ViewerPos;
+    vsOutput.viewDir = worldPos - ViewerPos;
     vsOutput.shadowCoord = mul(modelToShadow, float4(vsInput.position, 1.0)).xyz;
 
-    vsOutput.normal = vsInput.normal;
-    vsOutput.tangent = vsInput.tangent;
-    vsOutput.bitangent = vsInput.bitangent;
+    float3x3 normalMatrix = (float3x3)modelToWorld;
+    vsOutput.normal    = normalize(mul(normalMatrix, vsInput.normal));
+    vsOutput.tangent   = normalize(mul(normalMatrix, vsInput.tangent));
+    vsOutput.bitangent = normalize(mul(normalMatrix, vsInput.bitangent));
 
 #if ENABLE_TRIANGLE_ID
     vsOutput.vertexID = materialIdx << 24 | (vertexID & 0xFFFF);

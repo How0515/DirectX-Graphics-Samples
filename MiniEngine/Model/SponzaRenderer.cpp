@@ -412,12 +412,14 @@ void Sponza::RenderObjects( GraphicsContext& gfxContext, const Matrix4& ViewProj
 {
     struct VSConstants
     {
-        Matrix4 modelToProjection;
-        Matrix4 modelToShadow;
+        Matrix4  modelToProjection;
+        Matrix4  modelToShadow;
+        Matrix4  modelToWorld;    // for world-space normal/pos transform
         XMFLOAT3 viewerPos;
     } vsConstants;
     vsConstants.modelToProjection = ViewProjMat * m_ModelTransform;
-    vsConstants.modelToShadow = m_SunShadow.GetShadowMatrix() * m_ModelTransform;
+    vsConstants.modelToShadow     = m_SunShadow.GetShadowMatrix() * m_ModelTransform;
+    vsConstants.modelToWorld      = m_ModelTransform;
     XMStoreFloat3(&vsConstants.viewerPos, viewerPos);
 
     gfxContext.SetDynamicConstantBufferView(Renderer::kMeshConstants, sizeof(vsConstants), &vsConstants);
@@ -465,10 +467,12 @@ static void RenderProceduralSurfaces(
     struct VSConstants {
         Matrix4  modelToProjection;
         Matrix4  modelToShadow;
+        Matrix4  modelToWorld;    // Identity: procedural surfaces are already in world space
         XMFLOAT3 viewerPos;
     } vsConst;
     vsConst.modelToProjection = viewProjMat;
     vsConst.modelToShadow     = m_SunShadow.GetShadowMatrix();
+    vsConst.modelToWorld      = Matrix4(kIdentity);
     XMStoreFloat3(&vsConst.viewerPos, viewerPos);
     ctx.SetDynamicConstantBufferView(Renderer::kMeshConstants, sizeof(vsConst), &vsConst);
 
@@ -669,6 +673,10 @@ void Sponza::RenderScene(
 
             {
                 ScopedTimer _prof2(L"Render Color", gfxContext);
+
+                // Shadow pass's RenderProceduralSurfaces left VB/IB on procedural buffers.
+                // Reset to model buffers before drawing the helmet.
+                pfnSetupGraphicsState();
 
                 gfxContext.TransitionResource(g_SSAOFullScreen, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 
