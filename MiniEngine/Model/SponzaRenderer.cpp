@@ -60,10 +60,10 @@ namespace Sponza
     Vector3 m_SunDirection;
     ShadowCamera m_SunShadow;
 
-    ExpVar m_AmbientIntensity("Sponza/Lighting/Ambient Intensity", 0.1f, -16.0f, 16.0f, 0.1f);
+    ExpVar m_AmbientIntensity("Sponza/Lighting/Ambient Intensity", 0.08f, -16.0f, 16.0f, 0.1f);
     ExpVar m_SunLightIntensity("Sponza/Lighting/Sun Light Intensity", 1.5f, 0.0f, 16.0f, 0.1f);
-    NumVar m_SunOrientation("Sponza/Lighting/Sun Orientation", -0.5f, -100.0f, 100.0f, 0.1f );
-    NumVar m_SunInclination("Sponza/Lighting/Sun Inclination", 0.75f, 0.0f, 1.0f, 0.01f );
+    NumVar m_SunOrientation("Sponza/Lighting/Sun Orientation", -1.0f, -100.0f, 100.0f, 0.1f );
+    NumVar m_SunInclination("Sponza/Lighting/Sun Inclination", 0.45f, 0.0f, 1.0f, 0.01f );
     NumVar ShadowDimX("Sponza/Lighting/Shadow Dim X", 5000, 1000, 10000, 100 );
     NumVar ShadowDimY("Sponza/Lighting/Shadow Dim Y", 3000, 1000, 10000, 100 );
     NumVar ShadowDimZ("Sponza/Lighting/Shadow Dim Z", 3000, 1000, 10000, 100 );
@@ -256,9 +256,9 @@ void Sponza::Startup( Camera& Camera )
         const float kFloorY   = -0.05f;
         const float kRoomHalf =  1.5f;
         const float kRoomTop  =  2.0f;
-        const float kBoxXMin  =  0.44f, kBoxXMax = 0.56f;
-        const float kBoxYMin  = kFloorY, kBoxYMax = 0.45f;
-        const float kBoxZMin  = -0.04f, kBoxZMax = 0.04f;
+        const float kBoxXMin  =  0.25f, kBoxXMax = 0.55f;
+        const float kBoxYMin  = kFloorY, kBoxYMax = 0.55f;
+        const float kBoxZMin  = -0.80f, kBoxZMax = -0.50f;
 
         // Surface diffuse colours (must match DiffuseHitShaderLib.hlsl's GetProceduralColor).
         struct SurfCol { float r, g, b; } cols[kNumProcSurfaces] = {
