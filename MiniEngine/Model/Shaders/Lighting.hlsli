@@ -28,6 +28,9 @@ cbuffer PSConstants : register(b0)
     uint4 FirstLightIndex;
 
     uint FrameIndexMod2;
+    // implicit 12-byte pad → offset 128
+    float4 PointLightPos;    // xyz = world position, w = unused
+    float4 PointLightColor;  // xyz = radiance, w = unused
 }
 
 StructuredBuffer<LightData> lightBuffer : register(t14);

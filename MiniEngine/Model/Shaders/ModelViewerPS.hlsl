@@ -69,6 +69,9 @@ MRT main(VSOutput vsOutput)
     float3 viewDir = normalize(vsOutput.viewDir);
     colorSum += ApplyDirectionalLight( diffuseAlbedo, specularAlbedo, specularMask, gloss, normal, viewDir, SunDirection, SunColor, vsOutput.shadowCoord, texShadow );
 
+    colorSum += ApplyPointLight( diffuseAlbedo, specularAlbedo, specularMask, gloss, normal, viewDir,
+        vsOutput.worldPos, PointLightPos.xyz, 9.0f, PointLightColor.xyz );
+
 	// ShadeLights(colorSum, pixelPos,
 	// 	diffuseAlbedo,
 	// 	specularAlbedo,

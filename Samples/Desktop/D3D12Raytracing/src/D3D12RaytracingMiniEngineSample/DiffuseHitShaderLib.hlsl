@@ -224,6 +224,17 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
             diffuse, float3(0.56f, 0.56f, 0.56f), 0.0f, 128.0f,
             normal, viewDir, SunDirection, SunColor);
 
+        {
+            float3 toLight = PointLightPos.xyz - worldPos;
+            float distSq = dot(toLight, toLight);
+            float invDist = rsqrt(distSq);
+            float distFalloff = 9.0f * (invDist * invDist);
+            distFalloff = max(0, distFalloff - rsqrt(distFalloff));
+            out3 += distFalloff * ApplyLightCommon(
+                diffuse, float3(0.56f, 0.56f, 0.56f), 0.0f, 128.0f,
+                normal, viewDir, toLight * invDist, PointLightColor.xyz);
+        }
+
         if (IsReflection)
             out3 = g_screenOutput[DispatchRaysIndex().xy].rgb + out3;
 
@@ -363,6 +374,17 @@ void Hit(inout RayPayload payload, in BuiltInTriangleIntersectionAttributes attr
         viewDir,
         SunDirection,
         SunColor);
+
+    {
+        float3 toLight = PointLightPos.xyz - worldPosition;
+        float distSq = dot(toLight, toLight);
+        float invDist = rsqrt(distSq);
+        float distFalloff = 9.0f * (invDist * invDist);
+        distFalloff = max(0, distFalloff - rsqrt(distFalloff));
+        outputColor += distFalloff * ApplyLightCommon(
+            diffuseColor, specularAlbedo, specularMask, gloss,
+            normal, viewDir, toLight * invDist, PointLightColor.xyz);
+    }
 
     // TODO: Should be passed in via material info
     if (IsReflection)

@@ -47,6 +47,8 @@ namespace Sponza
     extern ShadowCamera m_SunShadow;
     extern ExpVar m_AmbientIntensity;
     extern ExpVar m_SunLightIntensity;
+    extern Math::Vector3 m_PointLightPos;
+    extern Math::Vector3 m_PointLightColor;
 
     // -------------------------------------------------------------------------
     // Procedural scene geometry (floor, walls, box occluder).
