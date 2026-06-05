@@ -67,14 +67,14 @@ namespace Sponza
     ExpVar m_SunLightIntensity("Sponza/Lighting/Sun Light Intensity", 1.5f, 0.0f, 16.0f, 0.1f);
     NumVar m_SunOrientation("Sponza/Lighting/Sun Orientation", -1.0f, -100.0f, 100.0f, 0.1f );
     NumVar m_SunInclination("Sponza/Lighting/Sun Inclination", 0.45f, 0.0f, 1.0f, 0.01f );
-    NumVar ShadowDimX("Sponza/Lighting/Shadow Dim X", 5000, 1000, 10000, 100 );
-    NumVar ShadowDimY("Sponza/Lighting/Shadow Dim Y", 3000, 1000, 10000, 100 );
-    NumVar ShadowDimZ("Sponza/Lighting/Shadow Dim Z", 3000, 1000, 10000, 100 );
+    NumVar ShadowDimX("Sponza/Lighting/Shadow Dim X", 5.0f, 0.5f, 20.0f, 0.25f);
+    NumVar ShadowDimY("Sponza/Lighting/Shadow Dim Y", 5.0f, 0.5f, 20.0f, 0.25f);
+    NumVar ShadowDimZ("Sponza/Lighting/Shadow Dim Z", 14.0f, 1.0f, 40.0f, 0.5f);
 
     NumVar m_PointLightSpeed("Sponza/Lighting/Point Light Speed",     0.8f, 0.0f, 5.0f,  0.1f);
     NumVar m_PointLightOrbit("Sponza/Lighting/Point Light Orbit",     0.9f, 0.0f, 1.4f,  0.05f);
     NumVar m_PointLightHeight("Sponza/Lighting/Point Light Height",   0.75f, 0.0f, 2.0f,  0.05f);
-    NumVar m_PointLightIntensity("Sponza/Lighting/Point Light Intensity", 1.0f, 0.0f, 10.0f, 0.1f);
+    NumVar m_PointLightIntensity("Sponza/Lighting/Point Light Intensity", 0.0f, 0.0f, 10.0f, 0.1f);
 
     // ---- Procedural scene geometry (floor, walls, box) ----------------------
     static const UINT kNumProcSurfaces = 5;
@@ -671,7 +671,11 @@ void Sponza::RenderScene(
             {
                 ScopedTimer _prof2(L"Render Shadow Map", gfxContext);
 
-                m_SunShadow.UpdateMatrix(-m_SunDirection, Vector3(0, -500.0f, 0), Vector3(ShadowDimX, ShadowDimY, ShadowDimZ),
+                // Shadow camera must be on the anti-sun side of the scene.
+                // camera_Z_axis = m_SunDirection, so scene must be in +m_SunDirection from camera.
+                const float kShadowOffset = 6.0f;
+                Vector3 shadowCenter = Vector3(0.0f, 0.8f, 0.0f) - m_SunDirection * kShadowOffset;
+                m_SunShadow.UpdateMatrix(-m_SunDirection, shadowCenter, Vector3(ShadowDimX, ShadowDimY, ShadowDimZ),
                     (uint32_t)g_ShadowBuffer.GetWidth(), (uint32_t)g_ShadowBuffer.GetHeight(), 16);
 
                 g_ShadowBuffer.BeginRendering(gfxContext);
