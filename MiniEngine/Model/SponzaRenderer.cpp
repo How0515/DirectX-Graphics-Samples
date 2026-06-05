@@ -60,6 +60,9 @@ namespace Sponza
     Vector3 m_SunDirection;
     ShadowCamera m_SunShadow;
 
+    Vector3 m_PointLightPos;
+    Vector3 m_PointLightColor;
+
     ExpVar m_AmbientIntensity("Sponza/Lighting/Ambient Intensity", 0.08f, -16.0f, 16.0f, 0.1f);
     ExpVar m_SunLightIntensity("Sponza/Lighting/Sun Light Intensity", 1.5f, 0.0f, 16.0f, 0.1f);
     NumVar m_SunOrientation("Sponza/Lighting/Sun Orientation", -1.0f, -100.0f, 100.0f, 0.1f );
@@ -67,6 +70,11 @@ namespace Sponza
     NumVar ShadowDimX("Sponza/Lighting/Shadow Dim X", 5000, 1000, 10000, 100 );
     NumVar ShadowDimY("Sponza/Lighting/Shadow Dim Y", 3000, 1000, 10000, 100 );
     NumVar ShadowDimZ("Sponza/Lighting/Shadow Dim Z", 3000, 1000, 10000, 100 );
+
+    NumVar m_PointLightSpeed("Sponza/Lighting/Point Light Speed",     0.8f, 0.0f, 5.0f,  0.1f);
+    NumVar m_PointLightOrbit("Sponza/Lighting/Point Light Orbit",     0.9f, 0.0f, 1.4f,  0.05f);
+    NumVar m_PointLightHeight("Sponza/Lighting/Point Light Height",   0.75f, 0.0f, 2.0f,  0.05f);
+    NumVar m_PointLightIntensity("Sponza/Lighting/Point Light Intensity", 3.0f, 0.0f, 10.0f, 0.1f);
 
     // ---- Procedural scene geometry (floor, walls, box) ----------------------
     static const UINT kNumProcSurfaces = 5;
@@ -242,10 +250,11 @@ void Sponza::Startup( Camera& Camera )
 
     m_ModelTransform = Matrix4(AffineTransform::MakeYRotation(XM_PI));
 
-    const Vector3 modelCenter = modelBounds.GetCenter();
-    const Vector3 cameraTarget = modelCenter + Vector3(0.0f, modelHalfHeight * 0.5f, 0.0f);
-    const Vector3 eye = cameraTarget + Vector3(0.0f, 0.0f, -modelThickness * 6.0f);
-    Camera.SetEyeAtUp( eye, cameraTarget, Vector3(kYUnitVector) );
+    // Fixed camera for shadow/lighting comparison experiment
+    Camera.SetEyeAtUp(
+        Vector3( 0.0f, 0.75f, -2.2f),   // eye: front-center, elevated
+        Vector3( 0.0f, 0.20f,  0.3f),   // target: floor center, slight depth
+        Vector3(kYUnitVector));
 
     Lighting::CreateRandomLights(modelBounds.GetMin(), modelBounds.GetMax());
 
@@ -548,18 +557,36 @@ void Sponza::RenderScene(
     float sinphi = sinf(m_SunInclination * 3.14159f * 0.5f);
     m_SunDirection = Normalize(Vector3( costheta * cosphi, sinphi, sintheta * cosphi ));
 
+    // Rotating point light
+    {
+        static int64_t s_lastTick = 0;
+        static double  s_totalTime = 0.0;
+        int64_t now = SystemTime::GetCurrentTick();
+        if (s_lastTick != 0)
+            s_totalTime += SystemTime::TimeBetweenTicks(s_lastTick, now);
+        s_lastTick = now;
+
+        float angle = (float)(s_totalTime * (double)m_PointLightSpeed);
+        float orbitR = (float)m_PointLightOrbit;
+        m_PointLightPos   = Vector3(cosf(angle) * orbitR,
+                                    (float)m_PointLightHeight,
+                                    sinf(angle) * orbitR);
+        m_PointLightColor = Vector3(1.0f, 0.85f, 0.5f) * (float)m_PointLightIntensity;
+    }
+
     __declspec(align(16)) struct
     {
-        Vector3 sunDirection;
-        Vector3 sunLight;
-        Vector3 ambientLight;
-        float ShadowTexelSize[4];
-
-        float InvTileDim[4];
+        Vector3  sunDirection;
+        Vector3  sunLight;
+        Vector3  ambientLight;
+        float    ShadowTexelSize[4];
+        float    InvTileDim[4];
         uint32_t TileCount[4];
         uint32_t FirstLightIndex[4];
-
-		uint32_t FrameIndexMod2;
+        uint32_t FrameIndexMod2;
+        // implicit 12-byte pad → offset 128
+        Vector3  pointLightPos;
+        Vector3  pointLightColor;
     } psConstants;
 
     psConstants.sunDirection = m_SunDirection;
@@ -572,7 +599,9 @@ void Sponza::RenderScene(
     psConstants.TileCount[1] = Math::DivideByMultiple(g_SceneColorBuffer.GetHeight(), Lighting::LightGridDim);
     psConstants.FirstLightIndex[0] = Lighting::m_FirstConeLight;
     psConstants.FirstLightIndex[1] = Lighting::m_FirstConeShadowedLight;
-	psConstants.FrameIndexMod2 = FrameIndex;
+    psConstants.FrameIndexMod2    = FrameIndex;
+    psConstants.pointLightPos     = m_PointLightPos;
+    psConstants.pointLightColor   = m_PointLightColor;
 
     // Set the default state for command lists
     auto& pfnSetupGraphicsState = [&](void)

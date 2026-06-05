@@ -68,6 +68,9 @@ __declspec(align(16)) struct HitShaderConstants
     Matrix4 modelToShadow;
     UINT32 IsReflection;
     UINT32 UseShadowRays;
+    // implicit 8-byte pad → offset 144
+    Vector3 pointLightPos;
+    Vector3 pointLightColor;
 };
 
 ByteAddressBuffer          g_hitConstantBuffer;
@@ -1131,6 +1134,8 @@ void Raytracebarycentrics(
 
     HitShaderConstants hitShaderConstants = {};
     hitShaderConstants.IsReflection = false;
+    hitShaderConstants.pointLightPos   = Sponza::m_PointLightPos;
+    hitShaderConstants.pointLightColor = Sponza::m_PointLightColor;
     context.WriteBuffer(g_hitConstantBuffer, 0, &hitShaderConstants, sizeof(hitShaderConstants));
 
     context.WriteBuffer(g_dynamicConstantBuffer, 0, &inputs, sizeof(inputs));
@@ -1235,6 +1240,8 @@ void D3D12RaytracingMiniEngineSample::RaytraceShadows(
     hitShaderConstants.modelToShadow = Sponza::m_SunShadow.GetShadowMatrix();
     hitShaderConstants.IsReflection = false;
     hitShaderConstants.UseShadowRays = false;
+    hitShaderConstants.pointLightPos   = Sponza::m_PointLightPos;
+    hitShaderConstants.pointLightColor = Sponza::m_PointLightColor;
     context.WriteBuffer(g_hitConstantBuffer, 0, &hitShaderConstants, sizeof(hitShaderConstants));
 
     ComputeContext& ctx = context.GetComputeContext();
@@ -1292,6 +1299,8 @@ void D3D12RaytracingMiniEngineSample::RaytraceDiffuse(
     hitShaderConstants.modelToShadow = Transpose(Sponza::m_SunShadow.GetShadowMatrix());
     hitShaderConstants.IsReflection = false;
     hitShaderConstants.UseShadowRays = rayTracingMode == RTM_DIFFUSE_WITH_SHADOWRAYS;
+    hitShaderConstants.pointLightPos   = Sponza::m_PointLightPos;
+    hitShaderConstants.pointLightColor = Sponza::m_PointLightColor;
     context.WriteBuffer(g_hitConstantBuffer, 0, &hitShaderConstants, sizeof(hitShaderConstants));
     context.WriteBuffer(g_dynamicConstantBuffer, 0, &inputs, sizeof(inputs));
 
@@ -1348,6 +1357,8 @@ void D3D12RaytracingMiniEngineSample::RaytraceReflections(
     hitShaderConstants.modelToShadow = Transpose(Sponza::m_SunShadow.GetShadowMatrix());
     hitShaderConstants.IsReflection = true;
     hitShaderConstants.UseShadowRays = false;
+    hitShaderConstants.pointLightPos   = Sponza::m_PointLightPos;
+    hitShaderConstants.pointLightColor = Sponza::m_PointLightColor;
     context.WriteBuffer(g_hitConstantBuffer, 0, &hitShaderConstants, sizeof(hitShaderConstants));
     context.WriteBuffer(g_dynamicConstantBuffer, 0, &inputs, sizeof(inputs));
 
