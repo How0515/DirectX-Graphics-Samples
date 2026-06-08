@@ -76,6 +76,11 @@ namespace Sponza
     NumVar m_PointLightHeight("Sponza/Lighting/Point Light Height",   0.75f, 0.0f, 2.0f,  0.05f);
     NumVar m_PointLightIntensity("Sponza/Lighting/Point Light Intensity", 0.0f, 0.0f, 10.0f, 0.1f);
 
+    NumVar m_PointLightSpeed("Sponza/Lighting/Point Light Speed",     0.8f, 0.0f, 5.0f,  0.1f);
+    NumVar m_PointLightOrbit("Sponza/Lighting/Point Light Orbit",     0.9f, 0.0f, 1.4f,  0.05f);
+    NumVar m_PointLightHeight("Sponza/Lighting/Point Light Height",   0.75f, 0.0f, 2.0f,  0.05f);
+    NumVar m_PointLightIntensity("Sponza/Lighting/Point Light Intensity", 3.0f, 0.0f, 10.0f, 0.1f);
+
     // ---- Procedural scene geometry (floor, walls, box) ----------------------
     static const UINT kNumProcSurfaces = 5;
 
